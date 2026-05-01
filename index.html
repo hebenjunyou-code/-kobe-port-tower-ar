@@ -57,8 +57,7 @@
   
   <div id="info" style="display:none;">
     <h3>🏯 神戸ポートタワー ARガイド</h3>
-    <p>マーカーをカメラに向けてください</p>
-    <p style="color: #aaa; font-size: 12px;">Hiroマーカー: <a href="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png" target="_blank" style="color: #6ff;">ダウンロード</a></p>
+    <p>画面をタップして AR コンテンツを配置してください</p>
   </div>
   
   <div id="error-msg">
@@ -66,28 +65,12 @@
     <button onclick="location.reload()" style="margin-top:10px; padding:10px 20px;">再試行</button>
   </div>
 
-  <!-- AR.js マーカー型AR -->
-  <a-scene id="ar-scene" embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;" vr-mode-ui="enabled: false" style="display:none;">
+  <!-- AR.js マーカーレス AR -->
+  <a-scene id="ar-scene" embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false" style="display:none;">
     
-    <!-- マーカー -->
-    <a-marker preset="hiro">
-      
-      <!-- 神戸ポートタワーの3Dモデル -->
-      <a-box position="0 0.5 0" 
-             color="#ff6b6b" 
-             scale="0.5 1.5 0.5"
-             animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear">
-      </a-box>
-      
-      <!-- テキスト表示 -->
-      <a-text value="神戸ポートタワー\n五感体験ARガイド" 
-              position="0 2 0" 
-              align="center" 
-              color="white"
-              scale="1.5 1.5 1.5">
-      </a-text>
-      
-    </a-marker>
+    <!-- AR コンテンツコンテナ -->
+    <a-entity id="ar-content">
+    </a-entity>
     
     <!-- カメラ -->
     <a-entity camera></a-entity>
@@ -95,6 +78,7 @@
 
   <script>
     let arStarted = false;
+    let contentCreated = false;
     
     function startAR() {
       document.getElementById('start-btn').style.display = 'none';
@@ -103,13 +87,49 @@
       arStarted = true;
     }
     
+    // AR シーン読み込み
+    const scene = document.querySelector('a-scene');
+    scene.addEventListener('loaded', function() {
+      console.log('AR scene loaded');
+      
+      // タップイベントでコンテンツを配置
+      document.addEventListener('click', createARContent);
+    });
+    
+    // AR コンテンツ作成
+    function createARContent() {
+      if (!arStarted || contentCreated) return;
+      
+      const container = document.getElementById('ar-content');
+      container.innerHTML = '';
+      
+      // 3D ボックス
+      const box = document.createElement('a-box');
+      box.setAttribute('position', '0 0 -3');
+      box.setAttribute('color', '#ff6b6b');
+      box.setAttribute('scale', '0.5 1.5 0.5');
+      box.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear');
+      container.appendChild(box);
+      
+      // テキスト
+      const text = document.createElement('a-text');
+      text.setAttribute('value', '神戸ポートタワー\n五感体験ARガイド');
+      text.setAttribute('position', '0 2 -3');
+      text.setAttribute('align', 'center');
+      text.setAttribute('color', 'white');
+      text.setAttribute('scale', '1.5 1.5 1.5');
+      container.appendChild(text);
+      
+      contentCreated = true;
+      console.log('AR content created');
+    }
+    
     // エラー処理
-    document.querySelector('a-scene').addEventListener('enter-vr', function() {
+    scene.addEventListener('enter-vr', function() {
       console.log('AR started');
     });
     
-    // エラーイベント
-    document.querySelector('a-scene').addEventListener('error', function(evt) {
+    scene.addEventListener('error', function(evt) {
       console.error('AR Error:', evt.detail);
       showError('カメラへのアクセスができませんでした。\nブラウザの設定でカメラを許可してください。');
     });
@@ -117,13 +137,6 @@
     function showError(msg) {
       document.getElementById('error-text').textContent = msg;
       document.getElementById('error-msg').style.display = 'block';
-    }
-    
-    // カメラ切り替え
-    let useFrontCamera = false;
-    function toggleCamera() {
-      useFrontCamera = !useFrontCamera;
-      location.reload();
     }
   </script>
 </body>
