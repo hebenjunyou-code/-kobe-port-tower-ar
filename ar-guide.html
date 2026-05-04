@@ -3,9 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>神戸ポートタワー ARガイド</title>
+  <title>Kobe Port Tower - Day-for-Night AR</title>
   <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
   <style>
     * { margin: 0; padding: 0; }
     body { 
@@ -13,6 +16,7 @@
       height: 100%;
       overflow: hidden; 
       background: #000;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     
     #start-btn {
@@ -20,19 +24,45 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: #ff6b6b;
+      background: linear-gradient(135deg, #ff6b6b, #ff5252);
       color: white;
       border: none;
-      padding: 20px 40px;
+      padding: 20px 50px;
       border-radius: 30px;
       font-size: 20px;
       cursor: pointer;
       z-index: 2000;
       font-weight: bold;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+      transition: all 0.3s ease;
     }
     
     #start-btn:active {
-      background: #ff5555;
+      transform: translate(-50%, -50%) scale(0.95);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    
+    #loading-spinner {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: none;
+      z-index: 2001;
+    }
+    
+    .spinner {
+      border: 4px solid rgba(255,255,255,0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
     
     #error-msg {
@@ -40,162 +70,498 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(255,0,0,0.9);
+      background: rgba(255,0,0,0.95);
       color: white;
-      padding: 20px;
+      padding: 25px;
       border-radius: 10px;
       display: none;
       z-index: 3000;
       text-align: center;
       font-size: 16px;
+      max-width: 80%;
     }
     
-    /* 夜間フィルターレイヤー */
-    #night-filter {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 20, 40, 0);
-      pointer-events: none;
-      z-index: 999;
-      transition: background 0.5s ease;
-    }
-    
-    /* 昼/夜切り替えボタン */
-    #mode-controls {
+    /* Control Panel */
+    #control-panel {
       position: fixed;
       bottom: 20px;
       left: 20px;
       z-index: 2000;
       display: none;
+      background: rgba(0,0,0,0.85);
+      padding: 15px;
+      border-radius: 12px;
+      color: white;
+      font-size: 12px;
+      border: 1px solid rgba(255,255,255,0.2);
+      max-width: 220px;
     }
     
-    #mode-controls button {
-      background: #4a90e2;
-      color: white;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 20px;
+    .control-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: #4a90e2;
+      font-size: 13px;
+    }
+    
+    .control-group {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    
+    .control-group label {
+      min-width: 90px;
+      font-size: 11px;
+    }
+    
+    .control-group input[type="range"] {
+      width: 70px;
+      height: 4px;
       cursor: pointer;
-      font-size: 14px;
+      accent-color: #4a90e2;
+    }
+    
+    .value-display {
+      min-width: 35px;
+      text-align: right;
+      font-size: 11px;
+      color: #4a90e2;
       font-weight: bold;
     }
     
-    #mode-controls button:active {
+    .button-group {
+      display: flex;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    
+    .button-group button {
+      flex: 1;
+      background: #4a90e2;
+      color: white;
+      border: none;
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+    
+    .button-group button:active {
       background: #3a7bc8;
+    }
+    
+    #status-info {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 2000;
+      display: none;
+      background: rgba(0,0,0,0.85);
+      padding: 12px;
+      border-radius: 8px;
+      color: #4a90e2;
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+      border: 1px solid rgba(74,144,226,0.3);
     }
   </style>
 </head>
 <body>
-  <!-- カメラ起動ボタン -->
-  <button id="start-btn" onclick="startAR()">🎬 ARを始める</button>
+  <button id="start-btn" onclick="startAR()">🎬 Day-for-Night AR</button>
   
-  <!-- 夜間フィルターレイヤー（暗さ調整用） -->
-  <div id="night-filter"></div>
-  
-  <!-- 昼/夜切り替えボタン -->
-  <div id="mode-controls">
-    <button onclick="toggleNightMode()">🌙 昼/夜切り替え</button>
+  <div id="loading-spinner">
+    <div class="spinner"></div>
+    <p style="color: white; margin-top: 15px; font-size: 14px;">Initializing...</p>
   </div>
   
-  <!-- エラーメッセージ -->
+  <div id="status-info">
+    <div>FPS: <span id="fps-counter">0</span></div>
+    <div>Segmentation: <span id="seg-status">Off</span></div>
+    <div>Effect: <span id="effect-status">Off</span></div>
+  </div>
+  
+  <div id="control-panel">
+    <div class="control-title">🌙 Day-for-Night</div>
+    
+    <div class="control-group">
+      <label>Intensity:</label>
+      <input type="range" min="0" max="100" value="75" id="intensity-slider" onchange="updateEffect()">
+      <span class="value-display" id="intensity-display">75%</span>
+    </div>
+    
+    <div class="control-group">
+      <label>Bloom:</label>
+      <input type="range" min="0" max="100" value="60" id="bloom-slider" onchange="updateEffect()">
+      <span class="value-display" id="bloom-display">60%</span>
+    </div>
+    
+    <div class="control-group">
+      <label>Grain:</label>
+      <input type="range" min="0" max="100" value="40" id="grain-slider" onchange="updateEffect()">
+      <span class="value-display" id="grain-display">40%</span>
+    </div>
+    
+    <div class="control-group">
+      <label>Sky:</label>
+      <input type="range" min="0" max="100" value="80" id="sky-slider" onchange="updateEffect()">
+      <span class="value-display" id="sky-display">80%</span>
+    </div>
+    
+    <div class="button-group">
+      <button onclick="toggleAI()">🤖 AI: ON</button>
+      <button onclick="resetEffect()">Reset</button>
+    </div>
+  </div>
+  
   <div id="error-msg">
-    <p id="error-text">エラーが発生しました</p>
-    <button onclick="location.reload()" style="margin-top:10px; padding:10px 20px; background: white; color: red; border: none; border-radius: 5px; cursor: pointer;">再試行</button>
+    <p id="error-text">Error</p>
+    <button onclick="location.reload()" style="margin-top:10px; padding:10px 20px; background: white; color: red; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">Retry</button>
   </div>
 
-  <!-- AR.js シーン（カメラのみ） -->
   <a-scene id="ar-scene" embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false" style="display:none;">
-    
-    <!-- 昼間ライティング（デフォルト） -->
-    <a-light id="ambient-day" type="ambient" color="white" intensity="1.0"></a-light>
-    <a-light id="directional-day" type="directional" color="white" intensity="0.8" position="5 10 5"></a-light>
-    
-    <!-- 夜間ライティング（非表示） -->
-    <a-light id="ambient-night" type="ambient" color="#1a3a52" intensity="0.2" visible="false"></a-light>
-    <a-light id="directional-night" type="directional" color="#4a7ba7" intensity="0.3" position="0 8 0" visible="false"></a-light>
-    
-    <!-- カメラ -->
     <a-entity camera></a-entity>
   </a-scene>
 
-  <script>
-    let arStarted = false;
-    let isNightMode = true;  // デフォルトを夜間モード
+  <script type="x-shader/x-fragment" id="dayForNightFragmentShader">
+precision highp float;
+
+uniform sampler2D tDiffuse;
+uniform sampler2D tSegmentation;
+uniform float uIntensity;
+uniform float uBloom;
+uniform float uGrain;
+uniform float uSkyReplace;
+uniform float uTime;
+uniform vec2 uResolution;
+uniform bool uUseSegmentation;
+
+varying vec2 vUv;
+
+float random(vec2 st) {
+    return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+}
+
+float noise(vec2 st) {
+    vec2 i = floor(st);
+    vec2 f = fract(st);
+    f = f * f * (3.0 - 2.0 * f);
+    float n = mix(
+        mix(random(i), random(i + vec2(1.0, 0.0)), f.x),
+        mix(random(i + vec2(0.0, 1.0)), random(i + vec2(1.0, 1.0)), f.x),
+        f.y
+    );
+    return n;
+}
+
+float getLuma(vec3 color) {
+    return dot(color, vec3(0.299, 0.587, 0.114));
+}
+
+vec3 starField(vec2 uv) {
+    vec3 stars = vec3(0.0);
+    for(int i = 0; i < 4; i++) {
+        float scale = exp(float(i)) * 0.5;
+        vec2 pos = mod(uv * scale, 1.0);
+        float dist = length(pos - 0.5);
+        float star = exp(-dist * dist * 100.0);
+        stars += vec3(1.0) * star * 0.5;
+    }
+    return stars;
+}
+
+vec3 nightSky(vec2 uv) {
+    vec3 topColor = vec3(0.01, 0.02, 0.05);
+    vec3 horizonColor = vec3(0.05, 0.1, 0.15);
+    float horizonFade = smoothstep(0.0, 0.4, uv.y);
+    vec3 skyColor = mix(horizonColor, topColor, horizonFade);
+    vec3 stars = starField(uv * vec2(1.0, 2.0));
+    skyColor += stars * 0.4;
+    return skyColor;
+}
+
+float getSkyMask(vec2 uv) {
+    return smoothstep(0.4, 0.25, uv.y);
+}
+
+vec3 colorGrade(vec3 color, float segMask) {
+    float luma = getLuma(color);
+    float maskInfluence = uUseSegmentation ? (1.0 - segMask) : 1.0;
+    vec3 nightTint = mix(
+        vec3(0.02, 0.08, 0.15),
+        vec3(0.1, 0.2, 0.25),
+        luma * luma
+    );
+    vec3 desaturated = mix(nightTint, vec3(luma) * 0.8, 0.2);
+    desaturated = pow(desaturated, vec3(0.75));
+    return mix(color, desaturated, maskInfluence);
+}
+
+vec3 extractAndBloomLights(vec3 color, float luma) {
+    float lightThreshold = smoothstep(0.7, 1.0, luma);
+    vec3 warmLight = vec3(1.0, 0.7, 0.4) * lightThreshold;
+    vec3 bloomed = mix(color, warmLight, lightThreshold * 0.7);
+    return bloomed;
+}
+
+vec3 crushBlacks(vec3 color) {
+    float luma = getLuma(color);
+    luma = smoothstep(0.0, 0.2, luma);
+    return color * luma + (1.0 - luma) * vec3(0.01);
+}
+
+void main() {
+    vec2 uv = vUv;
+    vec4 texColor = texture2D(tDiffuse, uv);
+    vec3 color = texColor.rgb;
     
-    function startAR() {
-      document.getElementById('start-btn').style.display = 'none';
-      document.getElementById('ar-scene').style.display = 'block';
-      document.getElementById('mode-controls').style.display = 'block';
-      arStarted = true;
-      
-      // 起動時に夜間ライティングを適用
-      applyNightMode();
+    float segMask = 0.0;
+    if(uUseSegmentation) {
+        vec4 segColor = texture2D(tSegmentation, uv);
+        segMask = segColor.r;
     }
     
-    // 昼/夜モード切り替え
-    function toggleNightMode() {
-      isNightMode = !isNightMode;
-      if (isNightMode) {
-        applyNightMode();
-      } else {
-        applyDayMode();
+    float luma = getLuma(color);
+    vec3 graded = colorGrade(color, segMask);
+    vec3 boosted = extractAndBloomLights(graded, luma);
+    graded = mix(graded, boosted, uBloom * 0.01);
+    
+    float skyMask = getSkyMask(uv);
+    if(uUseSegmentation) {
+        skyMask *= (1.0 - segMask);
+    }
+    vec3 nightSkyColor = nightSky(uv);
+    graded = mix(graded, nightSkyColor, skyMask * (uSkyReplace * 0.01));
+    
+    graded = crushBlacks(graded);
+    float grain = noise(uv * uResolution * 0.25 + uTime * 8.0) * 2.0 - 1.0;
+    graded += grain * uGrain * 0.005;
+    graded = mix(color, graded, uIntensity * 0.01);
+    
+    gl_FragColor = vec4(graded, texColor.a);
+}
+  </script>
+
+  <script type="x-shader/x-vertex" id="vertexShader">
+varying vec2 vUv;
+
+void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+  </script>
+
+  <script>
+    let arStarted = false;
+    let composer = null;
+    let dayForNightPass = null;
+    let effectEnabled = true;
+    let aiEnabled = false;
+    let segmenter = null;
+    let segmentationCanvas = null;
+    let segmentationTexture = null;
+    let cameraStream = null;
+    let videoElement = null;
+    let fps = 0;
+    let frameCount = 0;
+    let lastFpsTime = Date.now();
+    
+    async function initMediaPipeSegmentation() {
+      try {
+        const selfieSegmentation = new SelfieSegmentation({
+          locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1/${file}`;
+          }
+        });
+        
+        selfieSegmentation.setOptions({
+          modelSelection: 1
+        });
+        
+        selfieSegmentation.onResults(onSegmentationResults);
+        segmenter = selfieSegmentation;
+        return true;
+      } catch (e) {
+        console.error('MediaPipe init failed:', e);
+        return false;
       }
     }
     
-    // 夜間ライティング適用
-    function applyNightMode() {
-      const ambientDay = document.getElementById('ambient-day');
-      const ambientNight = document.getElementById('ambient-night');
-      const directionalDay = document.getElementById('directional-day');
-      const directionalNight = document.getElementById('directional-night');
-      
-      ambientDay.setAttribute('visible', false);
-      ambientNight.setAttribute('visible', true);
-      directionalDay.setAttribute('visible', false);
-      directionalNight.setAttribute('visible', true);
-      
-      // フィルターで暗くする
-      const nightFilter = document.getElementById('night-filter');
-      nightFilter.style.background = 'rgba(0, 20, 40, 0.4)';
+    let segmentationResults = null;
+    function onSegmentationResults(results) {
+      segmentationResults = results;
     }
     
-    // 昼間ライティング適用
-    function applyDayMode() {
-      const ambientDay = document.getElementById('ambient-day');
-      const ambientNight = document.getElementById('ambient-night');
-      const directionalDay = document.getElementById('directional-day');
-      const directionalNight = document.getElementById('directional-night');
-      
-      ambientDay.setAttribute('visible', true);
-      ambientNight.setAttribute('visible', false);
-      directionalDay.setAttribute('visible', true);
-      directionalNight.setAttribute('visible', false);
-      
-      // フィルターを透明に
-      const nightFilter = document.getElementById('night-filter');
-      nightFilter.style.background = 'rgba(0, 20, 40, 0)';
+    async function processSegmentation(videoEl) {
+      if (!segmenter || !aiEnabled) return;
+      try {
+        await segmenter.send({ image: videoEl });
+      } catch (e) {
+        console.error('Segmentation error:', e);
+      }
     }
     
-    // AR シーン読み込み
-    const scene = document.querySelector('a-scene');
-    scene.addEventListener('loaded', function() {
-      console.log('AR scene loaded - Camera feed with night mode');
-    });
+    function updateSegmentationTexture() {
+      if (!segmentationResults || !segmentationCanvas) return;
+      const mask = segmentationResults.segmentationMask;
+      const ctx = segmentationCanvas.getContext('2d');
+      const imageData = ctx.createImageData(256, 256);
+      const data = imageData.data;
+      
+      for (let i = 0; i < Math.min(mask.data.length, 256 * 256); i++) {
+        data[i * 4] = mask.data[i] * 255;
+        data[i * 4 + 1] = 0;
+        data[i * 4 + 2] = 0;
+        data[i * 4 + 3] = 255;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      segmentationTexture.needsUpdate = true;
+    }
     
-    // エラー処理
-    scene.addEventListener('error', function(evt) {
-      console.error('AR Error:', evt.detail);
-      showError('カメラへのアクセスができませんでした。\nブラウザの設定でカメラを許可してください。');
-    });
+    function initDayForNightEffect(renderer, scene, camera) {
+      const THREE = window.THREE;
+      try {
+        composer = new THREE.EffectComposer(renderer);
+        composer.addPass(new THREE.RenderPass(scene, camera));
+        
+        segmentationCanvas = document.createElement('canvas');
+        segmentationCanvas.width = 256;
+        segmentationCanvas.height = 256;
+        segmentationTexture = new THREE.CanvasTexture(segmentationCanvas);
+        
+        const DayForNightShader = {
+          uniforms: {
+            tDiffuse: { value: null },
+            tSegmentation: { value: segmentationTexture },
+            uIntensity: { value: 0.75 },
+            uBloom: { value: 0.6 },
+            uGrain: { value: 0.4 },
+            uSkyReplace: { value: 0.8 },
+            uTime: { value: 0.0 },
+            uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+            uUseSegmentation: { value: false }
+          },
+          vertexShader: document.getElementById('vertexShader').textContent,
+          fragmentShader: document.getElementById('dayForNightFragmentShader').textContent
+        };
+        
+        dayForNightPass = new THREE.ShaderPass(DayForNightShader);
+        dayForNightPass.renderToScreen = true;
+        composer.addPass(dayForNightPass);
+        
+        const sceneEl = document.getElementById('ar-scene');
+        const originalRender = sceneEl.renderer.render.bind(sceneEl.renderer);
+        let time = 0;
+        
+        sceneEl.renderer.render = function(s, c) {
+          originalRender(s, c);
+          if (composer && effectEnabled && dayForNightPass) {
+            if (videoElement && aiEnabled) {
+              processSegmentation(videoElement);
+              updateSegmentationTexture();
+              dayForNightPass.uniforms.uUseSegmentation.value = true;
+            } else {
+              dayForNightPass.uniforms.uUseSegmentation.value = false;
+            }
+            dayForNightPass.uniforms.uTime.value = time;
+            composer.render();
+            time += 0.016;
+            frameCount++;
+            const now = Date.now();
+            if (now - lastFpsTime >= 1000) {
+              fps = frameCount;
+              frameCount = 0;
+              lastFpsTime = now;
+              document.getElementById('fps-counter').textContent = fps;
+            }
+          }
+        };
+        return true;
+      } catch (e) {
+        console.error('Effect init failed:', e);
+        return false;
+      }
+    }
+    
+    async function startAR() {
+      document.getElementById('start-btn').style.display = 'none';
+      document.getElementById('loading-spinner').style.display = 'block';
+      arStarted = true;
+      
+      const mpReady = await initMediaPipeSegmentation();
+      const sceneEl = document.getElementById('ar-scene');
+      sceneEl.style.display = 'block';
+      document.getElementById('status-info').style.display = 'block';
+      document.getElementById('control-panel').style.display = 'block';
+      
+      sceneEl.addEventListener('loaded', async function onLoaded() {
+        sceneEl.removeEventListener('loaded', onLoaded);
+        try {
+          videoElement = document.querySelector('video');
+          const effectReady = initDayForNightEffect(sceneEl.renderer, sceneEl.object3D, sceneEl.camera);
+          if (effectReady && mpReady) {
+            aiEnabled = true;
+            document.getElementById('effect-status').textContent = 'On';
+            document.getElementById('seg-status').textContent = 'Ready';
+            updateEffect();
+          }
+        } catch (e) {
+          console.error('Init error:', e);
+          showError('Failed: ' + e.message);
+        }
+        document.getElementById('loading-spinner').style.display = 'none';
+      });
+    }
+    
+    function updateEffect() {
+      if (!dayForNightPass) return;
+      const intensity = document.getElementById('intensity-slider').value;
+      const bloom = document.getElementById('bloom-slider').value;
+      const grain = document.getElementById('grain-slider').value;
+      const sky = document.getElementById('sky-slider').value;
+      
+      dayForNightPass.uniforms.uIntensity.value = intensity / 100;
+      dayForNightPass.uniforms.uBloom.value = bloom / 100;
+      dayForNightPass.uniforms.uGrain.value = grain / 100;
+      dayForNightPass.uniforms.uSkyReplace.value = sky / 100;
+      
+      document.getElementById('intensity-display').textContent = intensity + '%';
+      document.getElementById('bloom-display').textContent = bloom + '%';
+      document.getElementById('grain-display').textContent = grain + '%';
+      document.getElementById('sky-display').textContent = sky + '%';
+    }
+    
+    function toggleAI() {
+      aiEnabled = !aiEnabled;
+      const btn = document.querySelector('[onclick="toggleAI()"]');
+      btn.textContent = aiEnabled ? '🤖 AI: ON' : '🤖 AI: OFF';
+      document.getElementById('seg-status').textContent = aiEnabled ? 'Active' : 'Off';
+    }
+    
+    function resetEffect() {
+      document.getElementById('intensity-slider').value = 75;
+      document.getElementById('bloom-slider').value = 60;
+      document.getElementById('grain-slider').value = 40;
+      document.getElementById('sky-slider').value = 80;
+      updateEffect();
+    }
     
     function showError(msg) {
+      document.getElementById('loading-spinner').style.display = 'none';
       document.getElementById('start-btn').style.display = 'none';
       document.getElementById('error-text').textContent = msg;
       document.getElementById('error-msg').style.display = 'block';
     }
+    
+    const scene = document.getElementById('ar-scene');
+    scene.addEventListener('error', function(evt) {
+      console.error('AR Error:', evt.detail);
+      showError('Camera access failed.');
+    });
   </script>
 </body>
 </html>
