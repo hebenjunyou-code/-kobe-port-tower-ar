@@ -82,16 +82,10 @@
     <a-light id="ambient-day" type="ambient" color="white" intensity="1.0"></a-light>
     <a-light id="directional-day" type="directional" color="white" intensity="0.8" position="5 10 5"></a-light>
     
-    <!-- 夜間ライティング（非表示） -->
+    <!-- 夜間ライティング（AR夜景効果用） -->
     <a-light id="ambient-night" type="ambient" color="#1a3a52" intensity="0.3" visible="false"></a-light>
     <a-light id="directional-night" type="directional" color="#4a7ba7" intensity="0.4" position="0 8 0" visible="false"></a-light>
     <a-light id="point-night" type="point" color="#ffeb3b" intensity="0.6" position="-2 3 -3" visible="false"></a-light>
-    
-    <!-- 昼間背景 -->
-    <a-sky id="sky-day" color="#87ceeb"></a-sky>
-    
-    <!-- 夜間背景 -->
-    <a-sky id="sky-night" color="#0d1b2a" visible="false"></a-sky>
     
     <!-- 月 -->
     <a-sphere id="moon" position="-8 5 -15" radius="2" color="#f0f0f0" emissive="#cccccc" visible="false"
@@ -139,8 +133,6 @@
     function toggleNightMode() {
       isNightMode = !isNightMode;
       
-      const skyDay = document.getElementById('sky-day');
-      const skyNight = document.getElementById('sky-night');
       const ambientDay = document.getElementById('ambient-day');
       const ambientNight = document.getElementById('ambient-night');
       const directionalDay = document.getElementById('directional-day');
@@ -150,9 +142,7 @@
       const stars = document.getElementById('stars');
       
       if (isNightMode) {
-        // 夜間モードに変更
-        skyDay.setAttribute('visible', false);
-        skyNight.setAttribute('visible', true);
+        // 夜間モードに変更（カメラ映像が暗く見える）
         ambientDay.setAttribute('visible', false);
         ambientNight.setAttribute('visible', true);
         directionalDay.setAttribute('visible', false);
@@ -172,8 +162,6 @@
         }
       } else {
         // 昼間モードに変更
-        skyDay.setAttribute('visible', true);
-        skyNight.setAttribute('visible', false);
         ambientDay.setAttribute('visible', true);
         ambientNight.setAttribute('visible', false);
         directionalDay.setAttribute('visible', true);
