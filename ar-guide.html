@@ -7,21 +7,14 @@
   <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <style>
-    body { margin: 0; overflow: hidden; }
-    #info {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      background: rgba(0,0,0,0.8);
-      color: white;
-      padding: 15px;
-      border-radius: 8px;
-      font-family: sans-serif;
-      z-index: 1000;
-      max-width: 90%;
+    * { margin: 0; padding: 0; }
+    body { 
+      width: 100%;
+      height: 100%;
+      overflow: hidden; 
+      background: #000;
     }
-    #info h3 { margin: 0 0 10px 0; font-size: 18px; }
-    #info p { margin: 5px 0; font-size: 14px; }
+    
     #start-btn {
       position: fixed;
       top: 50%;
@@ -35,19 +28,63 @@
       font-size: 20px;
       cursor: pointer;
       z-index: 2000;
+      font-weight: bold;
     }
+    
+    #start-btn:active {
+      background: #ff5555;
+    }
+    
     #error-msg {
       position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(255,0,0,0.8);
+      background: rgba(255,0,0,0.9);
       color: white;
       padding: 20px;
       border-radius: 10px;
       display: none;
       z-index: 3000;
       text-align: center;
+      font-size: 16px;
+    }
+    
+    /* 夜間フィルターレイヤー */
+    #night-filter {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 20, 40, 0);
+      pointer-events: none;
+      z-index: 999;
+      transition: background 0.5s ease;
+    }
+    
+    /* 昼/夜切り替えボタン */
+    #mode-controls {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      z-index: 2000;
+      display: none;
+    }
+    
+    #mode-controls button {
+      background: #4a90e2;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    
+    #mode-controls button:active {
+      background: #3a7bc8;
     }
   </style>
 </head>
@@ -55,58 +92,30 @@
   <!-- カメラ起動ボタン -->
   <button id="start-btn" onclick="startAR()">🎬 ARを始める</button>
   
-  <div id="info" style="display:none;">
-    <h3>🏯 神戸ポートタワー ARガイド</h3>
-    <p>画面をタップして AR コンテンツを配置してください</p>
-  </div>
+  <!-- 夜間フィルターレイヤー（暗さ調整用） -->
+  <div id="night-filter"></div>
   
   <!-- 昼/夜切り替えボタン -->
-  <div id="mode-controls" style="display:none; position: fixed; bottom: 20px; left: 20px; z-index: 2000;">
-    <button onclick="toggleNightMode()" style="background: #4a90e2; color: white; border: none; padding: 12px 24px; border-radius: 20px; margin-right: 10px; cursor: pointer; font-size: 14px;">
-      🌙 夜間モード
-    </button>
+  <div id="mode-controls">
+    <button onclick="toggleNightMode()">🌙 昼/夜切り替え</button>
   </div>
   
+  <!-- エラーメッセージ -->
   <div id="error-msg">
     <p id="error-text">エラーが発生しました</p>
-    <button onclick="location.reload()" style="margin-top:10px; padding:10px 20px;">再試行</button>
+    <button onclick="location.reload()" style="margin-top:10px; padding:10px 20px; background: white; color: red; border: none; border-radius: 5px; cursor: pointer;">再試行</button>
   </div>
 
-  <!-- AR.js マーカーレス AR -->
+  <!-- AR.js シーン（カメラのみ） -->
   <a-scene id="ar-scene" embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false" style="display:none;">
     
     <!-- 昼間ライティング（デフォルト） -->
     <a-light id="ambient-day" type="ambient" color="white" intensity="1.0"></a-light>
     <a-light id="directional-day" type="directional" color="white" intensity="0.8" position="5 10 5"></a-light>
     
-    <!-- 夜間ライティング（AR夜景効果用） -->
-    <a-light id="ambient-night" type="ambient" color="#1a3a52" intensity="0.3" visible="false"></a-light>
-    <a-light id="directional-night" type="directional" color="#4a7ba7" intensity="0.4" position="0 8 0" visible="false"></a-light>
-    <a-light id="point-night" type="point" color="#ffeb3b" intensity="0.6" position="-2 3 -3" visible="false"></a-light>
-    
-    <!-- 月 -->
-    <a-sphere id="moon" position="-8 5 -15" radius="2" color="#f0f0f0" emissive="#cccccc" visible="false"
-      animation="property: rotation; to: 0 360 0; loop: true; dur: 30000; easing: linear">
-    </a-sphere>
-    
-    <!-- 星（パーティクル風） -->
-    <a-entity id="stars" visible="false">
-      <a-sphere position="-10 8 -20" radius="0.1" color="white" emissive="white"></a-sphere>
-      <a-sphere position="5 9 -18" radius="0.1" color="white" emissive="white"></a-sphere>
-      <a-sphere position="-3 6 -22" radius="0.08" color="white" emissive="white"></a-sphere>
-      <a-sphere position="8 7 -20" radius="0.12" color="white" emissive="white"></a-sphere>
-      <a-sphere position="-6 10 -18" radius="0.09" color="white" emissive="white"></a-sphere>
-      <a-sphere position="3 8 -21" radius="0.11" color="white" emissive="white"></a-sphere>
-      <a-sphere position="-12 9 -19" radius="0.08" color="white" emissive="white"></a-sphere>
-      <a-sphere position="10 6 -22" radius="0.1" color="white" emissive="white"></a-sphere>
-    </a-entity>
-    
-    <!-- AR コンテンツコンテナ -->
-    <a-entity id="ar-content">
-    </a-entity>
-    
-    <!-- パーティクルエフェクト（光の粒） -->
-    <a-entity id="particle-system" visible="false"></a-entity>
+    <!-- 夜間ライティング（非表示） -->
+    <a-light id="ambient-night" type="ambient" color="#1a3a52" intensity="0.2" visible="false"></a-light>
+    <a-light id="directional-night" type="directional" color="#4a7ba7" intensity="0.3" position="0 8 0" visible="false"></a-light>
     
     <!-- カメラ -->
     <a-entity camera></a-entity>
@@ -114,12 +123,11 @@
 
   <script>
     let arStarted = false;
-    let isNightMode = true;  // デフォルトを夜間モードにする
+    let isNightMode = true;  // デフォルトを夜間モード
     
     function startAR() {
       document.getElementById('start-btn').style.display = 'none';
       document.getElementById('ar-scene').style.display = 'block';
-      document.getElementById('info').style.display = 'none';  // 情報パネルは非表示
       document.getElementById('mode-controls').style.display = 'block';
       arStarted = true;
       
@@ -130,65 +138,61 @@
     // 昼/夜モード切り替え
     function toggleNightMode() {
       isNightMode = !isNightMode;
-      isNightMode ? applyNightMode() : applyDayMode();
+      if (isNightMode) {
+        applyNightMode();
+      } else {
+        applyDayMode();
+      }
     }
     
+    // 夜間ライティング適用
     function applyNightMode() {
       const ambientDay = document.getElementById('ambient-day');
       const ambientNight = document.getElementById('ambient-night');
       const directionalDay = document.getElementById('directional-day');
       const directionalNight = document.getElementById('directional-night');
-      const pointNight = document.getElementById('point-night');
-      const moon = document.getElementById('moon');
-      const stars = document.getElementById('stars');
       
-      // 夜間ライティング有効化
       ambientDay.setAttribute('visible', false);
       ambientNight.setAttribute('visible', true);
       directionalDay.setAttribute('visible', false);
       directionalNight.setAttribute('visible', true);
-      pointNight.setAttribute('visible', true);
-      moon.setAttribute('visible', true);
-      stars.setAttribute('visible', true);
+      
+      // フィルターで暗くする
+      const nightFilter = document.getElementById('night-filter');
+      nightFilter.style.background = 'rgba(0, 20, 40, 0.4)';
     }
     
+    // 昼間ライティング適用
     function applyDayMode() {
       const ambientDay = document.getElementById('ambient-day');
       const ambientNight = document.getElementById('ambient-night');
       const directionalDay = document.getElementById('directional-day');
       const directionalNight = document.getElementById('directional-night');
-      const pointNight = document.getElementById('point-night');
-      const moon = document.getElementById('moon');
-      const stars = document.getElementById('stars');
       
-      // 昼間ライティング有効化
       ambientDay.setAttribute('visible', true);
       ambientNight.setAttribute('visible', false);
       directionalDay.setAttribute('visible', true);
       directionalNight.setAttribute('visible', false);
-      pointNight.setAttribute('visible', false);
-      moon.setAttribute('visible', false);
-      stars.setAttribute('visible', false);
+      
+      // フィルターを透明に
+      const nightFilter = document.getElementById('night-filter');
+      nightFilter.style.background = 'rgba(0, 20, 40, 0)';
     }
     
     // AR シーン読み込み
     const scene = document.querySelector('a-scene');
     scene.addEventListener('loaded', function() {
-      console.log('AR scene loaded - Camera feed only');
-      // タップイベントリスナーは削除（3Dモデル作成を停止）
+      console.log('AR scene loaded - Camera feed with night mode');
     });
     
     // エラー処理
-    scene.addEventListener('enter-vr', function() {
-      console.log('AR started');
-    });
-    
     scene.addEventListener('error', function(evt) {
       console.error('AR Error:', evt.detail);
       showError('カメラへのアクセスができませんでした。\nブラウザの設定でカメラを許可してください。');
     });
     
     function showError(msg) {
+      document.getElementById('start-btn').style.display = 'none';
       document.getElementById('error-text').textContent = msg;
       document.getElementById('error-msg').style.display = 'block';
     }
